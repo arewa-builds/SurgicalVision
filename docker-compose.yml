@@ -1,0 +1,27 @@
+services:
+  surgicalvision:
+    build: .
+    image: surgicalvision:local
+    ports:
+      - "8000:8000"
+    environment:
+      SURGICALVISION_DATA: /data/analyses
+    volumes:
+      - surgicalvision-data:/data/analyses
+    mem_limit: 1g
+    cpus: 1.0
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  surgicalvision-data:

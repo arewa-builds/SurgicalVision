@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import traceback
 from pathlib import Path
@@ -11,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from surgicalvision import __version__
 from surgicalvision.api.store import AnalysisStore
-from surgicalvision.config import DEMO_FPS, DEMO_SECONDS, DEMO_SIZE
+from surgicalvision.config import DATA_DIR, DEMO_FPS, DEMO_SECONDS, DEMO_SIZE, STATIC_DIR
 from surgicalvision.demo.synthetic_video import generate_synthetic_case
 from surgicalvision.pipeline.runner import run_pipeline
 from surgicalvision.schemas import AnalysisResult, DemoRequest
@@ -20,10 +21,11 @@ store = AnalysisStore()
 app = FastAPI(title="SurgicalVision", version=__version__)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.environ.get("SURGICALVISION_CORS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _run_job(analysis_id: str, video_path: Path) -> None:
@@ -99,7 +101,6 @@ def get_overlay(analysis_id: str) -> FileResponse:
 def get_original(analysis_id: str) -> FileResponse:
     path = store.original_path(analysis_id)
     if not path.exists():
-        # upload may have kept a non-mp4 suffix
         matches = list(store.dir_for(analysis_id).glob("original.*"))
         if not matches:
             raise HTTPException(404, "Original video not found")
@@ -107,6 +108,19 @@ def get_original(analysis_id: str) -> FileResponse:
     return FileResponse(path, media_type="video/mp4", filename=path.name)
 
 
-frontend_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="ui")
+def _mount_ui() -> None:
+    if not STATIC_DIR.exists():
+        return
+    assets = STATIC_DIR / "assets"
+    if assets.exists():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+    index = STATIC_DIR / "index.html"
+    if not index.exists():
+        return
+
+    @app.get("/")
+    def ui_root() -> FileResponse:
+        return FileResponse(index)
+
+
+_mount_ui()

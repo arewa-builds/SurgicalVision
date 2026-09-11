@@ -10,7 +10,10 @@ def _workspace_root() -> Path:
 
 ROOT = _workspace_root()
 DATA_DIR = Path(os.environ.get("SURGICALVISION_DATA", ROOT / "data" / "analyses"))
+STATIC_DIR = Path(os.environ.get("SURGICALVISION_STATIC", ROOT / "frontend" / "dist"))
 YOLO_WEIGHTS = os.environ.get("SURGICALVISION_YOLO_WEIGHTS", "").strip()
+HOST = os.environ.get("SURGICALVISION_HOST", "0.0.0.0")
+PORT = int(os.environ.get("SURGICALVISION_PORT", os.environ.get("PORT", "8000")))
 
 DEMO_SECONDS = float(os.environ.get("SURGICALVISION_DEMO_SECONDS", "8"))
 DEMO_FPS = int(os.environ.get("SURGICALVISION_DEMO_FPS", "24"))
