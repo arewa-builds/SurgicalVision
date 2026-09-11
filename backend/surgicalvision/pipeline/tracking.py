@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from surgicalvision.constants import LEFT, RIGHT
-from surgicalvision.geometry import interpolate_nans
+from surgicalvision.geometry import interpolate_nans, moving_average
 from surgicalvision.pipeline.detection import Detection
 
 
@@ -60,7 +60,7 @@ def track_instruments(frame_detections: list[list[Detection]], frame_count: int)
 
     tracks: dict[str, Track] = {}
     for label in (LEFT, RIGHT):
-        filled = interpolate_nans(tips[label])
+        filled = moving_average(interpolate_nans(tips[label]), window=7)
         if not np.isfinite(filled).any():
             continue
         tracks[label] = Track(label=label, tips=filled, boxes=boxes[label], conf=confs[label])

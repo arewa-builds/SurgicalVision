@@ -146,6 +146,34 @@ def downsample_series(xy: np.ndarray, fps: float, max_points: int = 180) -> list
     return rows
 
 
+def moving_average(xy: np.ndarray, window: int = 7) -> np.ndarray:
+    """Smooth an (N, 2) trajectory; preserves leading/trailing NaNs."""
+    out = xy.astype(np.float64).copy()
+    n = len(out)
+    if n == 0 or window < 2:
+        return out
+    valid = np.isfinite(out).all(axis=1)
+    if valid.sum() < window:
+        return out
+    first, last = int(np.argmax(valid)), int(n - 1 - np.argmax(valid[::-1]))
+    span = out[first : last + 1]
+    kernel = np.ones(window, dtype=np.float64) / window
+    pad = window // 2
+    for dim in (0, 1):
+        padded = np.pad(span[:, dim], (pad, window - 1 - pad), mode="edge")
+        out[first : last + 1, dim] = np.convolve(padded, kernel, mode="valid")[: len(span)]
+    out[~valid] = np.nan
+    return out
+
+
+def bbox_extent(xy: np.ndarray) -> float:
+    pts = finite_points(xy)
+    if len(pts) == 0:
+        return 0.0
+    span = pts.max(axis=0) - pts.min(axis=0)
+    return float(np.linalg.norm(span))
+
+
 def clip_score(value: float) -> float:
     return float(np.clip(round(value, 1), 0.0, 100.0))
 

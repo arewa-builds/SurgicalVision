@@ -23,9 +23,9 @@ def _bgr_to_hsv(bgr: tuple[int, int, int]) -> np.ndarray:
     return cv2.cvtColor(px, cv2.COLOR_BGR2HSV)[0, 0]
 
 
-def _mask_hue(hsv: np.ndarray, center_bgr: tuple[int, int, int], h_pad: int = 12) -> np.ndarray:
+def _mask_hue(hsv: np.ndarray, center_bgr: tuple[int, int, int], h_pad: int = 16) -> np.ndarray:
     h, s, v = (int(x) for x in _bgr_to_hsv(center_bgr))
-    lo = np.array([max(0, h - h_pad), 40, 40], dtype=np.uint8)
+    lo = np.array([max(0, h - h_pad), 35, 35], dtype=np.uint8)
     hi = np.array([min(179, h + h_pad), 255, 255], dtype=np.uint8)
     mask = cv2.inRange(hsv, lo, hi)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))

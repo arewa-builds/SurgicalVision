@@ -9,7 +9,7 @@ from surgicalvision.geometry import (
     direction_reversals,
     displacement,
     downsample_series,
-    path_efficiency,
+    moving_average,
     path_length,
     velocities,
 )
@@ -25,39 +25,53 @@ def compute_instrument_metrics(
     speed = velocities(xy, fps)
     accel = derivatives(speed, fps)
     jerk = derivatives(accel, fps)
-    idle_thresh = 0.025 * float(np.hypot(w, h))
+    idle_thresh = 0.03 * float(np.hypot(w, h))
     idle_mask = speed < idle_thresh
-    idle_frames = int(idle_mask.sum())
-    duration = len(xy) / fps if fps else 0.0
+    n = max(len(xy), 1)
+    i0, i1 = int(0.12 * n), max(int(0.12 * n) + 1, int(0.88 * n))
+    mid_idle = float(idle_mask[i0:i1].mean()) if i1 > i0 else float(idle_mask.mean())
     hull = convex_hull_area(xy)
+    raw_len = path_length(xy)
+    smooth_len = path_length(moving_average(xy, window=15))
+    smoothness = float(np.clip(smooth_len / raw_len, 0.0, 1.0)) if raw_len > 1e-6 else 1.0
     return InstrumentMetrics(
         label=track.label,
-        path_length_px=round(path_length(xy), 2),
+        path_length_px=round(raw_len, 2),
         displacement_px=round(displacement(xy), 2),
-        path_efficiency=round(path_efficiency(xy), 4),
+        path_efficiency=round(smoothness, 4),
         mean_velocity_px_s=round(float(np.nanmean(speed)), 2),
         max_velocity_px_s=round(float(np.nanmax(speed)), 2),
         mean_acceleration_px_s2=round(float(np.nanmean(np.abs(accel))), 2),
         mean_jerk_px_s3=round(float(np.nanmean(np.abs(jerk))), 2),
-        idle_time_s=round(idle_frames / fps if fps else 0.0, 3),
-        idle_fraction=round(idle_frames / max(len(xy), 1), 4),
+        idle_time_s=round(float(idle_mask.sum()) / fps if fps else 0.0, 3),
+        idle_fraction=round(mid_idle, 4),
         workspace_utilization=round(hull / max(w * h, 1), 4),
-        corrective_movements=direction_reversals(xy, min_step_px=max(2.0, 0.004 * w)),
+        corrective_movements=direction_reversals(xy, min_step_px=max(3.0, 0.006 * w)),
         tip_series=downsample_series(xy, fps),
     )
 
 
-def compute_bimanual(tracks: dict[str, Track], fps: float) -> BimanualMetrics | None:
+def _smooth1d(values: np.ndarray, window: int = 9) -> np.ndarray:
+    if len(values) < window:
+        return values
+    kernel = np.ones(window, dtype=np.float64) / window
+    pad = window // 2
+    padded = np.pad(values.astype(np.float64), (pad, window - 1 - pad), mode="edge")
+    return np.convolve(padded, kernel, mode="valid")[: len(values)]
+
+
+def compute_bimanual(
+    tracks: dict[str, Track], fps: float, frame_size: tuple[int, int]
+) -> BimanualMetrics | None:
     if LEFT not in tracks or RIGHT not in tracks:
         return None
     left, right = tracks[LEFT].tips, tracks[RIGHT].tips
     n = min(len(left), len(right))
     left, right = left[:n], right[:n]
-    lv = velocities(left, fps)
-    rv = velocities(right, fps)
-    diag = float(np.hypot(np.nanmax(left[:, 0]) - np.nanmin(left[:, 0]) + 1, 1))
-    # Activity sync: both moving or both idle.
-    thresh = 8.0
+    lv = _smooth1d(velocities(left, fps))
+    rv = _smooth1d(velocities(right, fps))
+    w, h = frame_size
+    thresh = 0.04 * float(np.hypot(w, h))
     both_move = (lv >= thresh) & (rv >= thresh)
     both_idle = (lv < thresh) & (rv < thresh)
     sync = float((both_move | both_idle).mean()) if n else 0.0
@@ -85,4 +99,5 @@ def metrics_for_tracks(
         for label in (LEFT, RIGHT)
         if label in tracks
     ]
-    return instruments, compute_bimanual(tracks, fps)
+    return instruments, compute_bimanual(tracks, fps, frame_size)
+

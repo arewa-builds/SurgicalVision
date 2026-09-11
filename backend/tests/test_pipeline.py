@@ -40,3 +40,4 @@ def test_novice_scores_lower_than_efficient(tmp_path: Path) -> None:
     assert efficient.overall_score is not None
     assert novice.overall_score is not None
     assert novice.overall_score < efficient.overall_score
+    assert efficient.overall_score >= 55

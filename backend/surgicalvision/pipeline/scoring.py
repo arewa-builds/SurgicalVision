@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from surgicalvision.constants import DIMENSIONS, EXPECTED_SUTURE_SEQUENCE
 from surgicalvision.geometry import clip_score, sequence_edit_distance
-from surgicalvision.schemas import BimanualMetrics, DimensionScore, GestureEvent, InstrumentMetrics
+from surgicalvision.schemas import BimanualMetrics, DimensionScore, InstrumentMetrics
 
 
 def _mean(values: list[float], default: float = 0.0) -> float:
     return sum(values) / len(values) if values else default
+
+
+def _primary(instruments: list[InstrumentMetrics]) -> InstrumentMetrics:
+    return next((i for i in instruments if i.label == "left"), instruments[0])
 
 
 def score_analysis(
@@ -22,56 +26,53 @@ def score_analysis(
         dims = [DimensionScore(key=k, label=lab, score=0.0, detail="No tracks") for k, lab in DIMENSIONS]
         return 0.0, dims, notes
 
-    path_eff = _mean([i.path_efficiency for i in instruments])
-    jerk = _mean([i.mean_jerk_px_s3 for i in instruments])
-    idle = _mean([i.idle_fraction for i in instruments])
-    corrective = sum(i.corrective_movements for i in instruments)
+    primary = _primary(instruments)
+    path_eff = primary.path_efficiency
+    jerk = primary.mean_jerk_px_s3
+    idle = primary.idle_fraction
+    corrective = primary.corrective_movements
     workspace = _mean([i.workspace_utilization for i in instruments])
-    max_vel = _mean([i.max_velocity_px_s for i in instruments])
+    max_vel = primary.max_velocity_px_s
 
-    # Motion economy: efficient paths, limited thrash.
-    motion = 100 * (0.55 * path_eff + 0.25 * max(0.0, 1 - idle * 1.2) + 0.20 * max(0.0, 1 - min(jerk / 25000.0, 1)))
-    if corrective > 8:
-        motion -= min(18, (corrective - 8) * 1.4)
+    jerk_pen = min(1.0, jerk / 24000.0)
+    rev_pen = min(1.0, corrective / 8.0)
+    idle_pen = min(1.0, max(0.0, idle - 0.08) / 0.42)
 
-    # Instrument control: smoothness and idle discipline.
-    control = 100 * (0.45 * max(0.0, 1 - min(jerk / 20000.0, 1)) + 0.35 * max(0.0, 1 - abs(idle - 0.18)) + 0.20 * path_eff)
-    if idle > 0.45:
+    motion = 100 * (0.40 * (1 - jerk_pen) + 0.35 * (1 - rev_pen) + 0.25 * path_eff)
+    control = 100 * (0.50 * (1 - jerk_pen) + 0.30 * (1 - idle_pen) + 0.20 * path_eff)
+    if idle > 0.42:
         notes.append("High idle time mid-task — possible hesitation or lost visualization.")
 
-    # Bimanual.
     if bimanual:
-        corr = (bimanual.velocity_correlation + 1) / 2  # 0..1
-        bimanual_score = 100 * (0.5 * bimanual.time_sync + 0.3 * corr + 0.2 * min(1.0, bimanual.dual_activity_fraction / 0.4))
+        corr = (bimanual.velocity_correlation + 1) / 2
+        # Experts often stabilize with one hand; both-instruments-flailing is not coordination.
+        complementary = max(0.0, 1.0 - abs(bimanual.dual_activity_fraction - 0.35) / 0.65)
+        bimanual_score = 100 * (0.58 * complementary + 0.42 * corr)
     else:
         bimanual_score = 55.0
         notes.append("Only one instrument track was available; bimanual score is limited.")
 
-    # Procedural efficiency from sequence alignment and duration.
     edits = sequence_edit_distance(observed, list(expected))
     extra = max(0, len(observed) - len(expected))
-    duration_pen = 0.0
-    if duration_s > 0:
-        # Efficient suturing sim is ~8s; much longer is hesitation.
-        duration_pen = min(1.0, max(0.0, (duration_s - 9.0) / 12.0))
-    procedural = 100 * (0.55 * max(0.0, 1 - edits / 6) + 0.25 * max(0.0, 1 - extra / 4) + 0.20 * (1 - duration_pen))
+    duration_pen = min(1.0, max(0.0, (duration_s - 9.0) / 12.0)) if duration_s > 0 else 0.0
+    procedural = 100 * (
+        0.50 * max(0.0, 1 - edits / 6) + 0.30 * max(0.0, 1 - extra / 4) + 0.20 * (1 - duration_pen)
+    )
     if "reposition" in observed:
         notes.append("Reposition / re-grasp steps appeared in the gesture sequence.")
-        procedural -= 6
+        procedural -= 8
     if observed.count("grasp") > 1:
         notes.append("Multiple grasp events — possible needle drop or re-grasp.")
-        procedural -= 5
+        procedural -= 6
 
-    # Tissue handling proxy: high jerk + high peak speed in a small workspace is harsher.
     tissue = 100 * (
-        0.4 * max(0.0, 1 - min(jerk / 22000.0, 1))
-        + 0.3 * max(0.0, 1 - min(max_vel / 900.0, 1))
-        + 0.3 * min(1.0, workspace / 0.12 + 0.4)
+        0.45 * (1 - jerk_pen)
+        + 0.30 * max(0.0, 1 - min(max_vel / 1200.0, 1))
+        + 0.25 * min(1.0, workspace / 0.08 + 0.45)
     )
 
-    # Error avoidance: reversals, extra grasps, idle spikes.
     error_hits = corrective + extra + observed.count("reposition") + max(0, observed.count("grasp") - 1)
-    error = 100 * max(0.0, 1 - error_hits / 14)
+    error = 100 * max(0.0, 1 - error_hits / 16)
     if idle > 0.5:
         error -= 8
 
@@ -84,10 +85,10 @@ def score_analysis(
         "error_avoidance": clip_score(error),
     }
     details = {
-        "motion_economy": f"Path efficiency {path_eff:.2f}; {corrective} direction reversals.",
-        "instrument_control": f"Mean jerk {jerk:.0f} px/s³; idle {idle:.0%}.",
+        "motion_economy": f"Path smoothness {path_eff:.2f}; {corrective} direction reversals.",
+        "instrument_control": f"Mean jerk {jerk:.0f} px/s³; mid-task idle {idle:.0%}.",
         "bimanual_coordination": (
-            f"Time sync {bimanual.time_sync:.2f}; velocity corr {bimanual.velocity_correlation:.2f}."
+            f"Complementary activity {bimanual.dual_activity_fraction:.2f}; velocity corr {bimanual.velocity_correlation:.2f}."
             if bimanual
             else "Single-instrument case."
         ),

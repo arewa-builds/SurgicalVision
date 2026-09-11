@@ -72,7 +72,7 @@ def _draw_instrument(
     h, w = frame.shape[:2]
     x0, y0 = int(entry[0]), int(entry[1])
     x1, y1 = int(np.clip(tip[0], 0, w - 1)), int(np.clip(tip[1], 0, h - 1))
-    cv2.line(frame, (x0, y0), (x1, y1), bgr, 7, cv2.LINE_AA)
+    cv2.line(frame, (x0, y0), (x1, y1), bgr, 9, cv2.LINE_AA)
     # metallic highlight
     mid = ((x0 + x1) // 2, (y0 + y1) // 2)
     cv2.line(frame, (x0, y0), (x1, y1), (min(255, bgr[0] + 40), min(255, bgr[1] + 40), min(255, bgr[2] + 40)), 2, cv2.LINE_AA)
@@ -138,7 +138,12 @@ def _novice_tips(t: float, duration: float) -> tuple[tuple[float, float], tuple[
         return add(_lerp(l_idle, l_over, p)), add(_lerp(r_idle, r_lag, p), (lag, 0))
     if u < 0.32:
         p = _phase_u(u, 0.22, 0.32)
-        return add(_lerp(l_over, l_back, p)), add(_lerp(r_lag, r_pos, p), (lag, 0))
+        via = (0.36, 0.28)
+        if p < 0.5:
+            left = _lerp(l_over, via, p * 2)
+        else:
+            left = _lerp(via, l_back, (p - 0.5) * 2)
+        return add(left), add(_lerp(r_lag, r_pos, p), (lag, 0.02 * np.sin(t * 5.0)))
     if u < 0.38:
         return add(l_back), add(r_pos, (lag, 0))
     if u < 0.46:

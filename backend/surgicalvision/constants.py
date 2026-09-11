@@ -6,8 +6,9 @@ LEFT = "left"
 RIGHT = "right"
 
 # BGR colors used by the synthetic renderer and the color detector.
+# Chosen to sit far from reddish tissue in HSV (cyan + magenta).
 LEFT_BGR = (255, 220, 40)
-RIGHT_BGR = (20, 170, 250)
+RIGHT_BGR = (220, 50, 210)
 
 GESTURE_VOCABULARY = (
     "idle",

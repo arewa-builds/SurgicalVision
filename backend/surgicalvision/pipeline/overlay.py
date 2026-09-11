@@ -6,15 +6,15 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from surgicalvision.constants import LEFT
+from surgicalvision.constants import LEFT, LEFT_BGR, RIGHT_BGR
 from surgicalvision.pipeline.tracking import Track
 from surgicalvision.schemas import GestureEvent, TimelineEvent
 
 GREEN = (96, 210, 120)
 AMBER = (40, 180, 232)
 RED = (70, 70, 232)
-CYAN = (255, 220, 40)
-GOLD = (20, 170, 250)
+CYAN = LEFT_BGR
+GOLD = RIGHT_BGR
 WHITE = (236, 240, 244)
 MUTED = (160, 170, 180)
 
@@ -209,7 +209,7 @@ def _draw_hud(canvas: np.ndarray, t: float) -> None:
     )
     cv2.putText(
         canvas,
-        "L cyan    R gold",
+        "L cyan    R magenta",
         (24, h - 16),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.42,
