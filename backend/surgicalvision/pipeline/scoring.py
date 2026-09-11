@@ -98,7 +98,7 @@ def score_analysis(
         ),
         "procedural_efficiency": f"Sequence edit distance {edits}; extra steps {extra}.",
         "tissue_handling": f"Peak speed {max_vel:.0f} px/s (workspace proxy, not tissue contact).",
-        "error_avoidance": f"{error_hits} review-linked events from reversals and extra gestures.",
+        "error_avoidance": f"{error_hits:.0f} review-linked events from reversals and extra gestures.",
     }
     dimensions = [
         DimensionScore(key=k, label=lab, score=scores[k], detail=details[k]) for k, lab in DIMENSIONS
