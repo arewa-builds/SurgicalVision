@@ -19,6 +19,7 @@ def score_analysis(
     observed: list[str],
     duration_s: float,
     expected: tuple[str, ...] = EXPECTED_SUTURE_SEQUENCE,
+    expected_duration_s: float = 9.0,
 ) -> tuple[float, list[DimensionScore], list[str]]:
     notes: list[str] = []
     if not instruments:
@@ -54,7 +55,9 @@ def score_analysis(
 
     edits = sequence_edit_distance(observed, list(expected))
     extra = max(0, len(observed) - len(expected))
-    duration_pen = min(1.0, max(0.0, (duration_s - 9.0) / 12.0)) if duration_s > 0 else 0.0
+    over = max(0.0, duration_s - expected_duration_s)
+    scale = max(12.0, expected_duration_s * 0.5)
+    duration_pen = min(1.0, over / scale) if duration_s > 0 else 0.0
     procedural = 100 * (
         0.50 * max(0.0, 1 - edits / 6) + 0.30 * max(0.0, 1 - extra / 4) + 0.20 * (1 - duration_pen)
     )

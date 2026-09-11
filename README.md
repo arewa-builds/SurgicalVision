@@ -10,10 +10,12 @@ Video → Detect → Track → Gestures → Motion metrics → Technique scores 
 
 These are **research-derived technique metrics, not clinical competency scores**. Mapping them onto validated assessments needs expert annotations and a framework such as OSATS.
 
+Built-in demos are real endoscopic trials from **JIGSAWS** (Johns Hopkins University / Intuitive Surgical): suturing, knot tying, and needle passing.
+
 ## Capabilities
 
 1. **Instrument tracking & motion efficiency** — left/right tip paths, path length, velocity, acceleration, jerk, idle time, workspace use, corrective reversals
-2. **Suturing technique assessment** — expected `Reach → Position → Grasp → Suture → Knot → Release` versus what was observed
+2. **Task technique assessment** — expected gesture order for the selected JIGSAWS task versus what was observed
 3. **Skill profile** — overall score plus Motion Economy, Instrument Control, Bimanual Coordination, Procedural Efficiency, Tissue Handling, Error Avoidance
 4. **Gesture recognition** — sliding-window labels on instrument kinematics (heuristic now; a temporal model can replace this stage later)
 
@@ -32,7 +34,7 @@ Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)** (same as [http://localho
 
 Uvicorn logs `http://0.0.0.0:8000` because that is where the process **binds**. It is not a URL. Opening `http://0.0.0.0:8000` in a browser typically fails with `ERR_CONNECTION_TIMED_OUT`.
 
-Click **Run efficient case** or **Run novice case**, or upload a recording.
+Click **Suturing**, **Knot tying**, or **Needle passing** (JIGSAWS), or upload a recording.
 
 With Compose:
 
@@ -80,11 +82,14 @@ Before a real cluster:
 
 | Action | What you get |
 |---|---|
-| Efficient simulation | Deliberate bimanual suturing — higher motion-economy / coordination scores |
-| Novice simulation | Overshoot, tremor, extra repositioning — lower scores, more review markers |
-| Upload video | Same pipeline on your file. Prototype detection prefers high-contrast instruments |
+| Suturing | JIGSAWS subject D, trial 005 — bimanual suturing on the foam pad |
+| Knot tying | Same capture, knot-tying bench |
+| Needle passing | Same capture, numbered-ring needle passing |
+| Upload video | Same pipeline on your file. Detection is tuned for dark metallic tools on a bright workspace |
 
 The report includes overlay playback, overall score, six dimensions, expected vs observed gestures, left/right metrics, and a seekable timeline.
+
+Clips live in `backend/surgicalvision/demo/jigsaws/` with citation in `NOTICE.md`. Gao et al., MICCAI 2014, *JHU-ISI Gesture and Skill Assessment Working Set (JIGSAWS)*.
 
 ## Local development
 
@@ -124,24 +129,24 @@ PYTHONPATH=backend pytest
 | `SURGICALVISION_DATA` | `data/analyses` (`/data/analyses` in the image) | Analysis JSON, original, overlay |
 | `SURGICALVISION_STATIC` | `frontend/dist` | Built UI |
 | `SURGICALVISION_CORS` | `*` | Allowed origins, comma-separated |
-| `SURGICALVISION_DEMO_SECONDS` | `8` | Synthetic case length |
-| `SURGICALVISION_DEMO_FPS` | `24` | Synthetic case frame rate |
-| `SURGICALVISION_DEMO_WIDTH` / `_HEIGHT` | `960` / `540` | Synthetic case size |
 | `SURGICALVISION_YOLO_WEIGHTS` | unset | Optional detector weights; not in the base image |
 | `PORT` | `8000` | Listen port inside the container |
+
+Synthetic OpenCV videos are still generated in unit tests (`SURGICALVISION_DEMO_*` in `config.py`). The product demos are the bundled JIGSAWS clips.
 
 ## API
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/health` | Liveness |
-| `POST` | `/api/analyses/demo` | `{ "profile": "efficient" \| "novice" }` |
+| `GET` | `/api/demo-cases` | JIGSAWS demo metadata |
+| `POST` | `/api/analyses/demo` | `{ "profile": "suturing" \| "knot_tying" \| "needle_passing" }` |
 | `POST` | `/api/analyses` | Multipart `file` upload |
 | `GET` | `/api/analyses/{id}` | Status and report JSON |
 | `GET` | `/api/analyses/{id}/overlay` | Annotated MP4 |
 | `GET` | `/api/analyses/{id}/original` | Source video |
 
-Poll `GET /api/analyses/{id}` until `status` is `complete` or `failed`.
+Poll `GET /api/analyses/{id}` until `status` is `complete` or `failed`. A full JIGSAWS trial is 40–70 seconds; analysis streams frames so it stays within the 1Gi container limit.
 
 ## Layout
 
@@ -149,7 +154,8 @@ Poll `GET /api/analyses/{id}` until `status` is `complete` or `failed`.
 backend/surgicalvision/
   api/          FastAPI jobs + static UI
   pipeline/     detect, track, gestures, metrics, scoring, overlay
-  demo/         synthetic laparoscopic scene
+  demo/         JIGSAWS cases + synthetic renderer for tests
+  demo/jigsaws/ bundled endoscopic clips + NOTICE
 frontend/       React dashboard (baked into the image)
 deploy/k8s.yaml Deployment + Service
 Dockerfile      Multi-stage: Node build → Python runtime
@@ -157,6 +163,6 @@ Dockerfile      Multi-stage: Node build → Python runtime
 
 ## What’s in this phase vs later
 
-**Now:** color/motion detector, tip tracking, kinematic gestures, research scores, overlay dashboard, Docker/Kubernetes packaging.
+**Now:** JIGSAWS demo trials, dark-shaft / color / motion detectors, tip tracking, kinematic gestures, research scores, overlay dashboard, Docker/Kubernetes packaging.
 
-**Later (keep them out of the default image):** YOLO + ByteTrack on surgical datasets (EndoVis), a video transformer for gestures, JIGSAWS suturing/knot tasks, correlation with expert ratings / OSATS. Optional weights can mount through `SURGICALVISION_YOLO_WEIGHTS` without baking PyTorch into the base container.
+**Later (keep them out of the default image):** YOLO + ByteTrack on surgical datasets (EndoVis), a video transformer for gestures, correlation with expert ratings / OSATS. Optional weights can mount through `SURGICALVISION_YOLO_WEIGHTS` without baking PyTorch into the base container.

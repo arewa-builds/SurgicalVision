@@ -53,3 +53,17 @@ def test_efficient_metrics_score_higher_than_novice() -> None:
     assert good > poor
     assert good >= 70
     assert poor <= good - 15
+
+
+def test_realistic_task_length_is_not_penalized() -> None:
+    inst = [_inst("left"), _inst("right")]
+    bi = BimanualMetrics(
+        time_sync=0.8, velocity_correlation=0.6, mean_tip_distance_px=100, dual_activity_fraction=0.35
+    )
+    seq = ["reach", "position", "grasp", "suture", "knot", "release"]
+    short, dims_short, _ = score_analysis(inst, bi, seq, 8.0, expected_duration_s=9.0)
+    long, dims_long, _ = score_analysis(inst, bi, seq, 62.0, expected_duration_s=70.0)
+    proc_short = next(d.score for d in dims_short if d.key == "procedural_efficiency")
+    proc_long = next(d.score for d in dims_long if d.key == "procedural_efficiency")
+    assert abs(proc_short - proc_long) < 1.0
+    assert long >= short - 1.0

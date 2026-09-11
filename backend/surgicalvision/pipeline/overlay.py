@@ -120,7 +120,7 @@ def _color_for_tag(tag: str, instrument: str) -> tuple[int, int, int]:
 
 
 def render_overlay(
-    frames: list[np.ndarray],
+    video_path: Path,
     tracks: dict[str, Track],
     gestures: list[GestureEvent],
     timeline: list[TimelineEvent],
@@ -128,64 +128,81 @@ def render_overlay(
     dest: Path,
 ) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if not frames:
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open video for overlay: {video_path}")
+    ok, first = cap.read()
+    if not ok:
+        cap.release()
         raise ValueError("No frames to render")
-    h, w = frames[0].shape[:2]
+    h, w = first.shape[:2]
     raw = dest.with_name(dest.stem + "_raw.mp4")
     writer = cv2.VideoWriter(str(raw), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
     if not writer.isOpened():
+        cap.release()
         raise RuntimeError("Could not open overlay video writer")
 
     tags = {label: classify_frames(track, fps) for label, track in tracks.items()}
     review_times = [e.t for e in timeline if e.severity == "red"]
-
     trail = 48
-    for idx, frame in enumerate(frames):
-        canvas = frame.copy()
-        t = idx / fps
-        for label, track in tracks.items():
-            color_base = CYAN if label == LEFT else GOLD
-            pts = []
-            for j in range(max(0, idx - trail), idx + 1):
-                p = track.tips[j]
-                if np.isfinite(p).all():
-                    pts.append((int(p[0]), int(p[1]), tags[label][j]))
-            for k in range(1, len(pts)):
-                x0, y0, tag = pts[k - 1]
-                x1, y1, _ = pts[k]
-                cv2.line(canvas, (x0, y0), (x1, y1), _color_for_tag(tag, label), 2, cv2.LINE_AA)
-            # faint full path
-            full = [(int(p[0]), int(p[1])) for p in track.tips[: idx + 1] if np.isfinite(p).all()]
-            if len(full) > 2:
-                cv2.polylines(canvas, [np.array(full, dtype=np.int32)], False, (*color_base, ), 1, cv2.LINE_AA)
-            tip = track.tips[idx]
-            if np.isfinite(tip).all():
-                cv2.circle(canvas, (int(tip[0]), int(tip[1])), 7, color_base, -1, cv2.LINE_AA)
-                cv2.circle(canvas, (int(tip[0]), int(tip[1])), 7, WHITE, 1, cv2.LINE_AA)
-                gesture = _active_gesture(gestures, t, label)
-                text = f"{label[0].upper()}  {gesture or '—'}"
-                cv2.putText(
-                    canvas,
-                    text,
-                    (int(tip[0]) + 10, int(tip[1]) - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.45,
-                    WHITE,
-                    1,
-                    cv2.LINE_AA,
-                )
-            box = track.boxes[idx] if idx < len(track.boxes) else None
-            if box:
-                cv2.rectangle(canvas, (box[0], box[1]), (box[2], box[3]), color_base, 1)
+    idx = 0
+    frame: np.ndarray | None = first
+    try:
+        while frame is not None:
+            canvas = frame.copy()
+            t = idx / fps
+            for label, track in tracks.items():
+                n_tips = len(track.tips)
+                if n_tips == 0:
+                    continue
+                last = min(idx, n_tips - 1)
+                color_base = CYAN if label == LEFT else GOLD
+                pts = []
+                for j in range(max(0, last - trail), last + 1):
+                    p = track.tips[j]
+                    if np.isfinite(p).all():
+                        tag = tags[label][j] if j < len(tags[label]) else "efficient"
+                        pts.append((int(p[0]), int(p[1]), tag))
+                for k in range(1, len(pts)):
+                    x0, y0, tag = pts[k - 1]
+                    x1, y1, _ = pts[k]
+                    cv2.line(canvas, (x0, y0), (x1, y1), _color_for_tag(tag, label), 2, cv2.LINE_AA)
+                full = [(int(p[0]), int(p[1])) for p in track.tips[: last + 1] if np.isfinite(p).all()]
+                if len(full) > 2:
+                    cv2.polylines(canvas, [np.array(full, dtype=np.int32)], False, (*color_base,), 1, cv2.LINE_AA)
+                tip = track.tips[last]
+                if np.isfinite(tip).all():
+                    cv2.circle(canvas, (int(tip[0]), int(tip[1])), 7, color_base, -1, cv2.LINE_AA)
+                    cv2.circle(canvas, (int(tip[0]), int(tip[1])), 7, WHITE, 1, cv2.LINE_AA)
+                    gesture = _active_gesture(gestures, t, label)
+                    text = f"{label[0].upper()}  {gesture or '—'}"
+                    cv2.putText(
+                        canvas,
+                        text,
+                        (int(tip[0]) + 10, int(tip[1]) - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.45,
+                        WHITE,
+                        1,
+                        cv2.LINE_AA,
+                    )
+                box = track.boxes[last] if last < len(track.boxes) else None
+                if box:
+                    cv2.rectangle(canvas, (box[0], box[1]), (box[2], box[3]), color_base, 1)
 
-        for rt in review_times:
-            if abs(rt - t) < (1.0 / max(fps, 1)):
-                cv2.circle(canvas, (w // 2, 36), 8, RED, -1, cv2.LINE_AA)
+            for rt in review_times:
+                if abs(rt - t) < (1.0 / max(fps, 1)):
+                    cv2.circle(canvas, (w // 2, 36), 8, RED, -1, cv2.LINE_AA)
 
-        _draw_hud(canvas, t)
-
-        writer.write(canvas)
-    writer.release()
+            _draw_hud(canvas, t)
+            writer.write(canvas)
+            idx += 1
+            ok, frame = cap.read()
+            if not ok:
+                frame = None
+    finally:
+        cap.release()
+        writer.release()
     _transcode_h264(raw, dest)
     return dest
 

@@ -1,5 +1,7 @@
 import type { AnalysisResult } from "./types";
 
+export type DemoProfile = "suturing" | "knot_tying" | "needle_passing";
+
 async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const text = await response.text();
@@ -8,7 +10,7 @@ async function parse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function startDemo(profile: "efficient" | "novice"): Promise<AnalysisResult> {
+export async function startDemo(profile: DemoProfile): Promise<AnalysisResult> {
   return parse(
     await fetch("/api/analyses/demo", {
       method: "POST",

@@ -32,6 +32,22 @@ EXPECTED_SUTURE_SEQUENCE = (
     "release",
 )
 
+EXPECTED_KNOT_SEQUENCE = (
+    "reach",
+    "position",
+    "grasp",
+    "knot",
+    "release",
+)
+
+EXPECTED_NEEDLE_SEQUENCE = (
+    "reach",
+    "position",
+    "grasp",
+    "suture",
+    "release",
+)
+
 DIMENSIONS = (
     ("motion_economy", "Motion Economy"),
     ("instrument_control", "Instrument Control"),
