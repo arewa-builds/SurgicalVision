@@ -1,0 +1,25 @@
+[project]
+name = "surgicalvision"
+version = "0.1.0"
+description = "AI surgical technique coach: tracking, gestures, motion metrics, and explainable scoring."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn>=0.32.0",
+  "python-multipart>=0.0.12",
+  "opencv-python-headless>=4.10.0",
+  "numpy>=2.0.0",
+  "pydantic>=2.9.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3.0", "httpx>=0.27.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+where = ["backend"]

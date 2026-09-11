@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: surgicalvision
+  labels:
+    app: surgicalvision
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: surgicalvision
+  template:
+    metadata:
+      labels:
+        app: surgicalvision
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: surgicalvision
+          image: surgicalvision:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: SURGICALVISION_DATA
+              value: /data/analyses
+            - name: SURGICALVISION_STATIC
+              value: /app/frontend/dist
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: analyses
+              mountPath: /data/analyses
+      volumes:
+        - name: analyses
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: surgicalvision
+  labels:
+    app: surgicalvision
+spec:
+  type: ClusterIP
+  selector:
+    app: surgicalvision
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
