@@ -1,0 +1,92 @@
+SurgicalVision is an AI Surgical Technique Coach built as a platform with the following capabilities
+
+1. Surgical Instrument Tracking & Motion Efficiency
+2. Suturing Technique Assessment
+3. Surgical Skill Classification
+4. Surgical Gesture Recognition
+ 
+ SurgicalVision: AI-Powered Surgical Technique Assessment System
+
+The system takes a recorded laparoscopic or robotic surgery/simulation and produces an objective technique assessment.
+
+The pipeline could be:
+
+Surgical Video → Instrument Detection → Instrument Tracking → Gesture Recognition → Motion Analytics → Technique Scoring → Visual Feedback
+
+For example, you could detect the surgeon's instruments using YOLO and track them frame-to-frame. From their trajectories you calculate:
+
+total instrument path length
+average and maximum velocity
+acceleration and jerk
+unnecessary movements
+instrument idle time
+workspace utilization
+left/right instrument coordination
+number of corrective movements
+task completion time
+
+An expert surgeon would generally be expected to demonstrate more deliberate, efficient and coordinated movements than a novice, although you would validate which metrics actually correlate with expert ratings rather than hard-code that assumption.
+
+Add surgical gesture recognition
+
+This makes the project considerably more sophisticated.
+
+Instead of seeing only instruments, the system recognizes what the surgeon is doing:
+
+Reach → Position → Grasp → Manipulate → Cut → Suture → Knot → Release
+
+You could use a temporal model such as a video transformer to classify these sequences.
+
+Then you can detect patterns such as:
+
+Expected: Grasp → Position → Suture → Tighten → Release
+
+versus an inefficient sequence:
+
+Grasp → Position → Reposition → Release → Re-grasp → Reposition → Suture
+
+The second sequence could indicate repeated corrective actions worth reviewing.
+
+Automated surgical technique score
+
+The final layer could produce a dashboard such as:
+
+Overall Technique Score: 84/100
+
+Dimension	Score
+Motion Economy	91
+Instrument Control	88
+Bimanual Coordination	82
+Procedural Efficiency	79
+Tissue Handling	86
+Error Avoidance	94
+
+Importantly, I would initially call these research-derived technique metrics, not clinical competency scores. Converting them into validated assessments requires expert surgeon annotations and validation against established frameworks such as OSATS.
+
+Even better: visual explainability
+
+Don't just give the surgeon a score.
+
+Overlay the instrument trajectories on the surgical video.
+
+For example:
+
+Green trajectory: efficient movement
+Yellow trajectory: corrective movement
+Red marker: potential technique/error event
+
+Then provide a timeline:
+
+00:00 ━━━━━ 01:15 ━━━━━ 02:30 ━━━━━ 03:45
+
+with markers identifying moments worth reviewing.
+
+That turns the project from a classification model into an AI-assisted surgical coaching system.
+
+A realistic technology stack
+
+Given your interest in computer vision engineering, I would structure it around Python + OpenCV + PyTorch, an object detector such as YOLO, ByteTrack/BoT-SORT for instrument tracking, segmentation where tissue interaction matters, and a temporal model for gesture recognition. MLflow could handle experiments and model versioning, while a lightweight web application could provide the assessment dashboard.
+
+For datasets, surgical skill datasets such as JIGSAWS are particularly relevant because they contain robotic surgical tasks such as suturing and knot tying along with skill-related information. Other surgical video datasets can support instrument detection, segmentation, workflow recognition, and action recognition.
+
+The strongest progression would be Instrument Tracking → Motion Metrics → Gesture Recognition → Skill Modeling → Explainable Technique Assessment. That gives you one coherent project that can start as a manageable CV prototype and eventually become a serious computer-vision research system rather than ten disconnected demos.
