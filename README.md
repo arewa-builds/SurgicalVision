@@ -28,7 +28,11 @@ docker build -t surgicalvision:local .
 docker run --rm -p 8000:8000 -v surgicalvision-data:/data/analyses surgicalvision:local
 ```
 
-Open [http://localhost:8000](http://localhost:8000). Click **Run efficient case** or **Run novice case**, or upload a recording.
+Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)** (same as [http://localhost:8000](http://localhost:8000)).
+
+Uvicorn logs `http://0.0.0.0:8000` because that is where the process **binds**. It is not a URL. Opening `http://0.0.0.0:8000` in a browser typically fails with `ERR_CONNECTION_TIMED_OUT`.
+
+Click **Run efficient case** or **Run novice case**, or upload a recording.
 
 With Compose:
 
@@ -39,6 +43,22 @@ docker compose up --build
 Health check: `GET /api/health`.
 
 The image is a single process (`uvicorn`, 1 worker). Analysis artifacts live under `/data/analyses`. Stay at **one replica** unless you add shared storage and sticky sessions — jobs are in-process.
+
+### Browser cannot connect
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `ERR_CONNECTION_TIMED_OUT` on `http://0.0.0.0:8000` | `0.0.0.0` is a bind address, not a host | Use [http://127.0.0.1:8000](http://127.0.0.1:8000) |
+| `ERR_CONNECTION_REFUSED` on localhost | Container is not running or port 8000 is not published | `docker ps` and rerun with `-p 8000:8000` |
+| Page never loads after `docker run` without `-p` | Port not mapped to the host | Always include `-p 8000:8000` |
+
+Confirm the API from the host:
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+You should see `{"status":"ok","version":"..."}`.
 
 ## Kubernetes
 

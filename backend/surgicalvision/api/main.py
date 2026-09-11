@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import threading
 import traceback
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -12,13 +14,25 @@ from fastapi.staticfiles import StaticFiles
 
 from surgicalvision import __version__
 from surgicalvision.api.store import AnalysisStore
-from surgicalvision.config import DATA_DIR, DEMO_FPS, DEMO_SECONDS, DEMO_SIZE, STATIC_DIR
+from surgicalvision.config import DATA_DIR, DEMO_FPS, DEMO_SECONDS, DEMO_SIZE, PORT, STATIC_DIR
 from surgicalvision.demo.synthetic_video import generate_synthetic_case
 from surgicalvision.pipeline.runner import run_pipeline
 from surgicalvision.schemas import AnalysisResult, DemoRequest
 
 store = AnalysisStore()
-app = FastAPI(title="SurgicalVision", version=__version__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    print(
+        f"SurgicalVision ready. Open http://127.0.0.1:{PORT}  "
+        "(not http://0.0.0.0 — that bind address times out in browsers)",
+        flush=True,
+    )
+    yield
+
+
+app = FastAPI(title="SurgicalVision", version=__version__, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("SURGICALVISION_CORS", "*").split(","),
