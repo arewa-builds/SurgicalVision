@@ -36,7 +36,8 @@ def score_analysis(
     max_vel = primary.max_velocity_px_s
 
     jerk_pen = min(1.0, jerk / 24000.0)
-    rev_pen = min(1.0, corrective / 8.0)
+    duration_scale = max(1.0, duration_s / 8.0)
+    rev_pen = min(1.0, corrective / (8.0 * duration_scale))
     idle_pen = min(1.0, max(0.0, idle - 0.08) / 0.42)
 
     motion = 100 * (0.40 * (1 - jerk_pen) + 0.35 * (1 - rev_pen) + 0.25 * path_eff)
@@ -74,7 +75,7 @@ def score_analysis(
         + 0.25 * min(1.0, workspace / 0.08 + 0.45)
     )
 
-    error_hits = corrective + extra + observed.count("reposition") + max(0, observed.count("grasp") - 1)
+    error_hits = corrective / duration_scale + extra + observed.count("reposition") + max(0, observed.count("grasp") - 1)
     error = 100 * max(0.0, 1 - error_hits / 16)
     if idle > 0.5:
         error -= 8
