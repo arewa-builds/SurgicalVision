@@ -124,7 +124,8 @@ def observed_sequence(events: list[GestureEvent], primary: str = "left") -> list
         return []
     t0 = min(e.start_s for e in ordered)
     t1 = max(e.end_s for e in ordered)
-    bin_w = 0.7
+    span = max(0.1, t1 - t0)
+    bin_w = max(0.7, span / 10.0)
     seq: list[str] = []
     t = t0
     while t < t1 - 0.05:

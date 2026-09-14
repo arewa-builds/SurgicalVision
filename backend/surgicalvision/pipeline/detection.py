@@ -128,6 +128,137 @@ class MotionInstrumentDetector:
         return list(by_label.values())
 
 
+class DarkShaftDetector:
+    """Detect dark metallic da Vinci shafts on a bright JIGSAWS workspace.
+
+    Color cues from the synthetic renderer do not apply here. Instruments are
+    locally dark, sit on the bright pad, and enter from the left and right
+    borders. Orange foam, ceiling clutter, and compact targets (cones) are
+    rejected with those priors.
+    """
+
+    def detect(self, frame: np.ndarray) -> list[Detection]:
+        h, w = frame.shape[:2]
+        mask = _workspace_dark_mask(frame)
+        left_mask = mask.copy()
+        left_mask[:, int(w * 0.64) :] = 0
+        right_mask = mask.copy()
+        right_mask[:, : int(w * 0.36)] = 0
+        left = _best_shaft(left_mask, LEFT, h, w)
+        right = _best_shaft(right_mask, RIGHT, h, w)
+        return [d for d in (left, right) if d is not None]
+
+
+def _workspace_dark_mask(frame: np.ndarray) -> np.ndarray:
+    h, w = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    hue, sat, val = cv2.split(hsv)
+    orange = (hue <= 22) & (sat >= 85) & (val >= 45)
+    bright = ((val > 95) & ~orange).astype(np.uint8) * 255
+    k15 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    workspace = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, k15)
+    workspace = cv2.dilate(workspace, k15, iterations=2)
+    blur = cv2.GaussianBlur(val, (21, 21), 0)
+    locally_dark = (val.astype(np.int16) < blur.astype(np.int16) - 14) & (val < 120)
+    abs_dark = val < 70
+    dark = ((locally_dark | abs_dark) & ~orange).astype(np.uint8) * 255
+    mask = cv2.bitwise_and(dark, workspace)
+    mask[: int(0.14 * h), :] = 0
+    open_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    close_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, open_k, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, close_k, iterations=1)
+    return mask
+
+
+def _best_shaft(mask: np.ndarray, label: str, h: int, w: int) -> Detection | None:
+    n_labels, cc, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    scored: list[tuple[float, int]] = []
+    for idx in range(1, n_labels):
+        x, y, bw, bh, area = (int(v) for v in stats[idx])
+        if area < 250 or area > 0.32 * w * h:
+            continue
+        if bw > 0.72 * w:
+            continue
+        cx, cy = float(centroids[idx][0]), float(centroids[idx][1])
+        if cy < 0.16 * h:
+            continue
+        aspect = max(bw, bh) / max(1.0, float(min(bw, bh)))
+        touches_left = x <= 10
+        touches_right = (x + bw) >= (w - 10)
+        if touches_left and touches_right:
+            continue
+        if label == LEFT:
+            if touches_right and not touches_left:
+                continue
+            if cx > 0.70 * w:
+                continue
+            border = 4.0 if touches_left else (1.2 if cx < 0.45 * w else 0.25)
+        else:
+            if touches_left and not touches_right:
+                continue
+            if cx < 0.30 * w:
+                continue
+            border = 4.0 if touches_right else (1.2 if cx > 0.55 * w else 0.25)
+        if aspect < 1.45 and not (touches_left or touches_right):
+            continue
+        shaft = 0.55 + 0.55 * min(aspect, 6.0)
+        score = float(area) * border * shaft
+        scored.append((score, idx))
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    best_idx = scored[0][1]
+    x, y, bw, bh, area = (int(v) for v in stats[best_idx])
+    ys, xs = np.where(cc == best_idx)
+    if xs.size == 0:
+        return None
+    if label == LEFT:
+        tip_i = int(np.argmax(xs.astype(np.float64) + 0.08 * ys))
+    else:
+        tip_i = int(np.argmin(xs.astype(np.float64) - 0.08 * ys))
+    conf = float(np.clip(0.45 + min(int(area), 9000) / 14000.0, 0.45, 0.95))
+    return Detection(
+        label=label,
+        conf=conf,
+        bbox=(x, y, x + bw, y + bh),
+        tip=(float(xs[tip_i]), float(ys[tip_i])),
+        centroid=(float(centroids[best_idx][0]), float(centroids[best_idx][1])),
+    )
+
+
+class AdaptiveInstrumentDetector:
+    """Prefer the synthetic color detector; fall back to dark shafts for JIGSAWS."""
+
+    def __init__(self) -> None:
+        self.color = ColorInstrumentDetector()
+        self.dark = DarkShaftDetector()
+        self._mode = "auto"
+        self._color_hits = 0
+        self._frames = 0
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    def detect(self, frame: np.ndarray) -> list[Detection]:
+        self._frames += 1
+        if self._mode == "color":
+            return self.color.detect(frame)
+        if self._mode == "dark":
+            return self.dark.detect(frame)
+        color = self.color.detect(frame)
+        if len(color) >= 2:
+            self._color_hits += 1
+            if self._color_hits >= 3:
+                self._mode = "color"
+            return color
+        dark = self.dark.detect(frame)
+        if self._frames >= 8 and self._color_hits == 0:
+            self._mode = "dark"
+        return dark
+
+
 class YOLODetector:
     """Optional Ultralytics YOLO hook. Used only when weights are configured."""
 
@@ -165,4 +296,4 @@ def build_detector():
             return YOLODetector(YOLO_WEIGHTS)
         except Exception:
             pass
-    return ColorInstrumentDetector()
+    return AdaptiveInstrumentDetector()

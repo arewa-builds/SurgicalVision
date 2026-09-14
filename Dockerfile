@@ -27,9 +27,11 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY backend /app/backend
 COPY --from=frontend /src/dist /app/frontend/dist
+COPY deploy/entrypoint.sh /app/entrypoint.sh
 
 RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /data/analyses \
+    && chmod +x /app/entrypoint.sh \
     && chown -R appuser:appuser /app /data
 
 USER 10001
@@ -38,4 +40,4 @@ VOLUME ["/data/analyses"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"
 
-CMD ["python", "-m", "uvicorn", "surgicalvision.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["/app/entrypoint.sh"]

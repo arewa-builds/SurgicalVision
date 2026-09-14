@@ -59,8 +59,9 @@ def track_instruments(frame_detections: list[list[Detection]], frame_count: int)
             confs[label][i] = det.conf
 
     tracks: dict[str, Track] = {}
+    smooth_window = 7 if frame_count < 250 else 21
     for label in (LEFT, RIGHT):
-        filled = moving_average(interpolate_nans(tips[label]), window=7)
+        filled = moving_average(interpolate_nans(tips[label]), window=smooth_window)
         if not np.isfinite(filled).any():
             continue
         tracks[label] = Track(label=label, tips=filled, boxes=boxes[label], conf=confs[label])

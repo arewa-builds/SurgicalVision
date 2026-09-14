@@ -19,6 +19,7 @@ def score_analysis(
     observed: list[str],
     duration_s: float,
     expected: tuple[str, ...] = EXPECTED_SUTURE_SEQUENCE,
+    expected_duration_s: float = 9.0,
 ) -> tuple[float, list[DimensionScore], list[str]]:
     notes: list[str] = []
     if not instruments:
@@ -35,7 +36,8 @@ def score_analysis(
     max_vel = primary.max_velocity_px_s
 
     jerk_pen = min(1.0, jerk / 24000.0)
-    rev_pen = min(1.0, corrective / 8.0)
+    duration_scale = max(1.0, duration_s / 8.0)
+    rev_pen = min(1.0, corrective / (8.0 * duration_scale))
     idle_pen = min(1.0, max(0.0, idle - 0.08) / 0.42)
 
     motion = 100 * (0.40 * (1 - jerk_pen) + 0.35 * (1 - rev_pen) + 0.25 * path_eff)
@@ -54,7 +56,9 @@ def score_analysis(
 
     edits = sequence_edit_distance(observed, list(expected))
     extra = max(0, len(observed) - len(expected))
-    duration_pen = min(1.0, max(0.0, (duration_s - 9.0) / 12.0)) if duration_s > 0 else 0.0
+    over = max(0.0, duration_s - expected_duration_s)
+    scale = max(12.0, expected_duration_s * 0.5)
+    duration_pen = min(1.0, over / scale) if duration_s > 0 else 0.0
     procedural = 100 * (
         0.50 * max(0.0, 1 - edits / 6) + 0.30 * max(0.0, 1 - extra / 4) + 0.20 * (1 - duration_pen)
     )
@@ -71,7 +75,7 @@ def score_analysis(
         + 0.25 * min(1.0, workspace / 0.08 + 0.45)
     )
 
-    error_hits = corrective + extra + observed.count("reposition") + max(0, observed.count("grasp") - 1)
+    error_hits = corrective / duration_scale + extra + observed.count("reposition") + max(0, observed.count("grasp") - 1)
     error = 100 * max(0.0, 1 - error_hits / 16)
     if idle > 0.5:
         error -= 8
@@ -94,7 +98,7 @@ def score_analysis(
         ),
         "procedural_efficiency": f"Sequence edit distance {edits}; extra steps {extra}.",
         "tissue_handling": f"Peak speed {max_vel:.0f} px/s (workspace proxy, not tissue contact).",
-        "error_avoidance": f"{error_hits} review-linked events from reversals and extra gestures.",
+        "error_avoidance": f"{error_hits:.0f} review-linked events from reversals and extra gestures.",
     }
     dimensions = [
         DimensionScore(key=k, label=lab, score=scores[k], detail=details[k]) for k, lab in DIMENSIONS

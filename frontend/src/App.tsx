@@ -3,6 +3,28 @@ import { getAnalysis, overlayUrl, startDemo, uploadVideo } from "./api";
 import { PIPELINE_STEPS, type AnalysisResult, type TimelineEvent } from "./types";
 
 type View = "home" | "running" | "report";
+type DemoProfile = "suturing" | "knot_tying" | "needle_passing";
+
+const DEMO_CASES: { id: DemoProfile; title: string; blurb: string; tone: string }[] = [
+  {
+    id: "suturing",
+    title: "Suturing",
+    blurb: "JIGSAWS da Vinci suturing — subject D, trial 005. Reach, throw, knot, release.",
+    tone: "",
+  },
+  {
+    id: "knot_tying",
+    title: "Knot tying",
+    blurb: "Same JHU capture, knot-tying bench. Shorter trial, tight bimanual work.",
+    tone: "knot",
+  },
+  {
+    id: "needle_passing",
+    title: "Needle passing",
+    blurb: "Needle passing across the numbered rings — transfer and pull-through.",
+    tone: "needle",
+  },
+];
 
 export default function App() {
   const [view, setView] = useState<View>("home");
@@ -28,7 +50,7 @@ export default function App() {
     return () => window.clearInterval(tick);
   }, [analysis]);
 
-  async function runDemo(profile: "efficient" | "novice") {
+  async function runDemo(profile: DemoProfile) {
     setBusy(true);
     setError(null);
     try {
@@ -90,7 +112,7 @@ function Home({
   onUpload,
 }: {
   busy: boolean;
-  onDemo: (profile: "efficient" | "novice") => void;
+  onDemo: (profile: DemoProfile) => void;
   onUpload: (file: File) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -99,11 +121,11 @@ function Home({
   return (
     <main className="home">
       <section className="hero">
-        <p className="eyebrow">Laparoscopic & robotic simulation</p>
+        <p className="eyebrow">JIGSAWS · Johns Hopkins / Intuitive Surgical</p>
         <h1>See the technique, not just the task.</h1>
         <p className="lede">
-          Recorded surgery in. Instrument tracks, gesture sequence, motion economy, and a review
-          timeline out. Scores are research-derived technique metrics until expert validation.
+          Real endoscopic trials in. Instrument tracks, gesture sequence, motion economy, and a
+          review timeline out. Scores are research-derived technique metrics until expert validation.
         </p>
         <ol className="pipe">
           {["Detect", "Track", "Gestures", "Metrics", "Score", "Explain"].map((step) => (
@@ -113,20 +135,16 @@ function Home({
       </section>
 
       <section className="actions">
-        <article className="case">
-          <h2>Efficient simulation</h2>
-          <p>Deliberate bimanual suturing: reach, position, grasp, suture, knot, release.</p>
-          <button disabled={busy} onClick={() => onDemo("efficient")}>
-            Run efficient case
-          </button>
-        </article>
-        <article className="case novice">
-          <h2>Novice simulation</h2>
-          <p>Overshoot, tremor, drop-and-regrasp, extra repositioning — the coaching contrast.</p>
-          <button disabled={busy} onClick={() => onDemo("novice")}>
-            Run novice case
-          </button>
-        </article>
+        {DEMO_CASES.map((c) => (
+          <article className={`case ${c.tone}`} key={c.id}>
+            <p className="case-kicker">JIGSAWS</p>
+            <h2>{c.title}</h2>
+            <p>{c.blurb}</p>
+            <button disabled={busy} onClick={() => onDemo(c.id)}>
+              Analyze {c.title.toLowerCase()}
+            </button>
+          </article>
+        ))}
         <article
           className={`case upload ${drag ? "drag" : ""}`}
           onDragOver={(e) => {
@@ -142,7 +160,7 @@ function Home({
           }}
         >
           <h2>Your recording</h2>
-          <p>Upload laparoscopic or robotic simulation video. Prototype detection prefers high-contrast instruments.</p>
+          <p>Upload a laparoscopic or robotic simulation. Dark metallic instruments on a bright workspace work best.</p>
           <button disabled={busy} onClick={() => inputRef.current?.click()}>
             Upload video
           </button>
@@ -168,7 +186,7 @@ function Running({ analysis }: { analysis: AnalysisResult }) {
     <main className="running">
       <h1>Analyzing technique</h1>
       <p className="lede">
-        {analysis.source.replace("_", " · ")} · {analysis.progress}%
+        {sourceLabel(analysis.source)} · {analysis.progress}%
       </p>
       <div className="bar">
         <span style={{ width: `${analysis.progress}%` }} />
@@ -408,6 +426,16 @@ function Timeline({
       </ul>
     </div>
   );
+}
+
+function sourceLabel(source: string): string {
+  const names: Record<string, string> = {
+    demo_suturing: "JIGSAWS · suturing",
+    demo_knot_tying: "JIGSAWS · knot tying",
+    demo_needle_passing: "JIGSAWS · needle passing",
+    upload: "Uploaded recording",
+  };
+  return names[source] || source.replaceAll("_", " ");
 }
 
 function fmt(seconds: number): string {

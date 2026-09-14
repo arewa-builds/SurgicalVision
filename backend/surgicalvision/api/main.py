@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import shutil
 import threading
 import traceback
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -12,13 +15,25 @@ from fastapi.staticfiles import StaticFiles
 
 from surgicalvision import __version__
 from surgicalvision.api.store import AnalysisStore
-from surgicalvision.config import DATA_DIR, DEMO_FPS, DEMO_SECONDS, DEMO_SIZE, STATIC_DIR
-from surgicalvision.demo.synthetic_video import generate_synthetic_case
+from surgicalvision.config import DATA_DIR, PORT, STATIC_DIR
+from surgicalvision.demo.cases import CASES, get_case
 from surgicalvision.pipeline.runner import run_pipeline
 from surgicalvision.schemas import AnalysisResult, DemoRequest
 
 store = AnalysisStore()
-app = FastAPI(title="SurgicalVision", version=__version__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    print(
+        f"SurgicalVision ready. Open http://127.0.0.1:{PORT}  "
+        "(not http://0.0.0.0 — that bind address times out in browsers)",
+        flush=True,
+    )
+    yield
+
+
+app = FastAPI(title="SurgicalVision", version=__version__, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("SURGICALVISION_CORS", "*").split(","),
@@ -54,17 +69,27 @@ def health() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
 
 
+@app.get("/api/demo-cases")
+def list_demo_cases() -> list[dict]:
+    return [case.as_public() for case in CASES.values()]
+
+
 @app.post("/api/analyses/demo", response_model=AnalysisResult)
 def start_demo(body: DemoRequest) -> AnalysisResult:
-    result = store.create(source=f"demo_{body.profile}")
-    dest = store.dir_for(result.id) / "original.mp4"
-    generate_synthetic_case(
-        dest,
-        profile=body.profile,
-        seconds=DEMO_SECONDS,
-        fps=DEMO_FPS,
-        size=DEMO_SIZE,
-    )
+    try:
+        case = get_case(body.profile)
+    except KeyError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    src = case.path()
+    if not src.exists():
+        raise HTTPException(500, f"Demo clip missing: {src.name}")
+    result = store.create(source=f"demo_{case.id}")
+    result.extras["task"] = case.id
+    result.extras["dataset"] = case.dataset
+    result.notes.append(case.attribution)
+    store.save(result)
+    dest = store.dir_for(result.id) / f"original{src.suffix.lower()}"
+    shutil.copyfile(src, dest)
     _spawn(result.id, dest)
     return result
 
@@ -105,7 +130,15 @@ def get_original(analysis_id: str) -> FileResponse:
         if not matches:
             raise HTTPException(404, "Original video not found")
         path = matches[0]
-    return FileResponse(path, media_type="video/mp4", filename=path.name)
+    suffix = path.suffix.lower()
+    media = {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".mkv": "video/x-matroska",
+        ".avi": "video/x-msvideo",
+    }.get(suffix, "application/octet-stream")
+    return FileResponse(path, media_type=media, filename=path.name)
 
 
 def _mount_ui() -> None:

@@ -81,4 +81,4 @@ class AnalysisResult(BaseModel):
 
 
 class DemoRequest(BaseModel):
-    profile: Literal["efficient", "novice"] = "efficient"
+    profile: Literal["suturing", "knot_tying", "needle_passing"] = "suturing"

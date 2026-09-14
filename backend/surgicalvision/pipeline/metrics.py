@@ -21,10 +21,12 @@ def compute_instrument_metrics(
     track: Track, fps: float, frame_size: tuple[int, int]
 ) -> InstrumentMetrics:
     w, h = frame_size
-    xy = track.tips
-    speed = velocities(xy, fps)
-    accel = derivatives(speed, fps)
-    jerk = derivatives(accel, fps)
+    stride = max(1, int(round(fps / 16.0)))
+    xy = track.tips[::stride]
+    metric_fps = fps / stride
+    speed = velocities(xy, metric_fps)
+    accel = derivatives(speed, metric_fps)
+    jerk = derivatives(accel, metric_fps)
     idle_thresh = 0.03 * float(np.hypot(w, h))
     idle_mask = speed < idle_thresh
     n = max(len(xy), 1)
@@ -34,6 +36,9 @@ def compute_instrument_metrics(
     raw_len = path_length(xy)
     smooth_len = path_length(moving_average(xy, window=15))
     smoothness = float(np.clip(smooth_len / raw_len, 0.0, 1.0)) if raw_len > 1e-6 else 1.0
+    min_step = max(3.0, 0.006 * w)
+    if len(track.tips) > 250:
+        min_step = max(min_step, 0.018 * w)
     return InstrumentMetrics(
         label=track.label,
         path_length_px=round(raw_len, 2),
@@ -43,11 +48,11 @@ def compute_instrument_metrics(
         max_velocity_px_s=round(float(np.nanmax(speed)), 2),
         mean_acceleration_px_s2=round(float(np.nanmean(np.abs(accel))), 2),
         mean_jerk_px_s3=round(float(np.nanmean(np.abs(jerk))), 2),
-        idle_time_s=round(float(idle_mask.sum()) / fps if fps else 0.0, 3),
+        idle_time_s=round(float(idle_mask.sum()) / metric_fps if metric_fps else 0.0, 3),
         idle_fraction=round(mid_idle, 4),
         workspace_utilization=round(hull / max(w * h, 1), 4),
-        corrective_movements=direction_reversals(xy, min_step_px=max(3.0, 0.006 * w)),
-        tip_series=downsample_series(xy, fps),
+        corrective_movements=direction_reversals(xy, min_step_px=min_step),
+        tip_series=downsample_series(track.tips, fps),
     )
 
 
