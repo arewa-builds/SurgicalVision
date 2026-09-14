@@ -89,7 +89,23 @@ Before a real cluster:
 
 The report includes overlay playback, overall score, six dimensions, expected vs observed gestures, left/right metrics, and a seekable timeline.
 
-Clips live in `backend/surgicalvision/demo/jigsaws/` with citation in `NOTICE.md`. Gao et al., MICCAI 2014, *JHU-ISI Gesture and Skill Assessment Working Set (JIGSAWS)*.
+## Dataset citation
+
+Built-in demos are endoscopic videos from the **JHU-ISI Gesture and Skill Assessment Working Set (JIGSAWS)**, collected at Johns Hopkins University with the da Vinci Surgical System (Intuitive Surgical). The bundled clips are subject D, trial 005, capture 1:
+
+| Task | File |
+|---|---|
+| Suturing | `backend/surgicalvision/demo/jigsaws/suturing.avi` |
+| Knot tying | `backend/surgicalvision/demo/jigsaws/knot_tying.avi` |
+| Needle passing | `backend/surgicalvision/demo/jigsaws/needle_passing.avi` |
+
+If you use these recordings, please cite:
+
+Gao, Y., Vedula, S. S., Reiley, C. E., Ahmidi, N., Varadarajan, B., Lin, H. C., Tao, L., Zappella, L., Béjar, B., Yuh, D. D., Chen, C. C. G., Vidal, R., Khudanpur, S., & Hager, G. D. (2014). The JHU-ISI Gesture and Skill Assessment Working Set (JIGSAWS): A surgical activity dataset for human motion modeling. In *Modeling and Monitoring of Computer Assisted Interventions (M2CAI) – MICCAI Workshop*.
+
+Ahmidi, N., Tao, L., Sefati, S., Gao, Y., Lea, C., Bejar Haro, B., Zappella, L., Khudanpur, S., Vidal, R., & Hager, G. D. (2017). A dataset and benchmarks for segmentation and recognition of gestures in robotic surgery. *IEEE Transactions on Biomedical Engineering*.
+
+Dataset page: [CIRL / JHU JIGSAWS release](https://cirl.lcsr.jhu.edu/research/hmm/datasets/jigsaws_release/). Clip-level notes are also in [`backend/surgicalvision/demo/jigsaws/NOTICE.md`](backend/surgicalvision/demo/jigsaws/NOTICE.md).
 
 ## Local development
 
